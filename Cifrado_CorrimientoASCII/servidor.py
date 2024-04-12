@@ -4,50 +4,55 @@ from cryptography.fernet import Fernet
 import socket
 import threading
 
-# Cargar la clave de cifrado
-def cargar_clave():
-    return open("clave.key", "rb").read()
-
 
 def handle_client(client_socket):
-    data = client_socket.recv(1024).decode('utf-8')
-    print(f"Received data: {data}")
-    parts = data.split(';')
-    request = parts[0]
-    if request == 'upload':
-        filename = parts[1]
-        receive_and_descif_file(client_socket, filename)
+    #Recibimos los datos del cliente
+    
+    #Recibimos el tipo de solicitud y el tamaño
+    typeRequest_length = int(client_socket.recv(4).decode('utf-8'))
+    typeRequest = client_socket.recv(typeRequest_length).decode('utf-8')
+    print(f"Request: {typeRequest}, size: {typeRequest_length}")
+
+    #Recibimos el nombre del archivo y el tamaño
+    filename_length = int(client_socket.recv(4).decode('utf-8'))
+    filename = client_socket.recv(filename_length).decode('utf-8')
+    print(f"FileName: {filename}, size: {filename_length}")
+
+    #Recibimos la clave
+    clave_length = int.from_bytes(client_socket.recv(4), 'big')
+    clave = client_socket.recv(clave_length)
+    print(f"Clave: {clave}, size: {clave_length}")
+
+    #Recibimos los datos cifrados y la longitud
+    data_c_length = int(client_socket.recv(4).decode('utf-8'))
+    data_c = client_socket.recv(data_c_length).decode('utf-8')
+    print(f"Data_c: {data_c}, size: {data_c_length}")
+
+    if typeRequest == 'upload':
+        receive_and_descif_file(clave, data_c, filename)
     client_socket.close()
 
 
 # Función para recibir el archivo cifrado del cliente, descifrarlo y mostrar el contenido
-def receive_and_descif_file(client_socket, filename):
-    clave = cargar_clave()
+def receive_and_descif_file(clave, data_c, filename):
     f = Fernet(clave)
+    
+    data_d = f.decrypt(data_c)
 
-    data = client_socket.recv(1024)
-    with open(filename, 'wb') as file:
-        while data:
-            file.write(data)
-            data = client_socket.recv(1024)
-
-    with open(filename, 'rb') as file:
-        encrypted_data = file.read()
-
-    decrypted_data = f.decrypt(encrypted_data)
-
-    nuevo_nombre = filename.replace("_c.", "_d.")
+    nuevo_nombre = filename.replace(".", "_d.")
     with open(nuevo_nombre, 'wb') as file:
-        file.write(decrypted_data)
+        file.write(data_d)
 
-    mostrar_contenido(nuevo_nombre)
+    mostrar_contenido(data_c, nuevo_nombre)
 
 # Función para mostrar el contenido del archivo
-def mostrar_contenido(archivo):
-    with open(archivo, "r") as file:
-        contenido = file.read()
-        texto_contenido.delete(1.0, tk.END)
-        texto_contenido.insert(tk.END, contenido)
+def mostrar_contenido(data_c, archivo_d):
+    texto_contenido_c.delete(1.0, tk.END)
+    texto_contenido_c.insert(tk.END, data_c)
+    with open(archivo_d, "r") as file:
+        contenido_d = file.read()
+        texto_contenido_d.delete(1.0, tk.END)
+        texto_contenido_d.insert(tk.END, contenido_d)
 
 # Configuramos el servidor y lo levantamos
 def start_server():
@@ -66,9 +71,13 @@ def start_server():
 ventana = tk.Tk()
 ventana.title("Cifrado y Descifrado de Archivos")
 
-# Agregar un widget Text para mostrar el contenido
-texto_contenido = tk.Text(ventana, height=10, width=50)
-texto_contenido.pack(pady=10)
+# Widget text para texto cifrado
+texto_contenido_c = tk.Text(ventana, height=10, width=50)
+texto_contenido_c.pack(pady=10)
+
+# Widget text para texto sin cifrar
+texto_contenido_d = tk.Text(ventana, height=10, width=50)
+texto_contenido_d.pack(pady=10)
 
 # Iniciar el servidor en un hilo separado
 server_thread = threading.Thread(target=start_server)
